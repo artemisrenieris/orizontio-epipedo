@@ -66,7 +66,9 @@ const state = {
   yMin: -0.2,
   yMax: 0.2,
   tAxisMax: 0.5,
+  tPredictedMax: 0.5,
   xPredictedMax: 12,
+  prediction: null,
   lastTime: null
 };
 
@@ -90,10 +92,26 @@ function syncTransportLabels() {
 
 function updatePredictedRange() {
   const T = state.mu * state.m * g;
-  const a1 = Math.max(0, (state.F - T) / state.m);
+  const net1 = state.F - T;
+  const a1 = Math.max(0, net1 / state.m);
   const v1 = a1 * state.forceDuration;
   const s1 = 0.5 * a1 * state.forceDuration * state.forceDuration;
-  const s2 = state.mu > 0 ? (v1 * v1) / (2 * state.mu * g) : 8;
+  const decel = state.mu * g;
+  const t2 = decel > 1e-9 ? v1 / decel : 0;
+  const s2 = decel > 1e-9 ? (v1 * v1) / (2 * decel) : 0;
+  const totalT = a1 <= 1e-9 ? state.forceDuration : state.forceDuration + t2;
+  state.prediction = {
+    T,
+    net1,
+    a1,
+    a2: decel > 1e-9 ? -decel : 0,
+    v1,
+    s1,
+    s2,
+    xTotal: s1 + s2,
+    tTotal: totalT
+  };
+  state.tPredictedMax = Math.max(0.5, totalT);
   state.xPredictedMax = Math.max(8, (s1 + s2) * 1.25 + 1);
 }
 
@@ -127,14 +145,21 @@ function updateDynamics() {
   }
 }
 
-function pushHistory() {
-  state.trace.push({
+function pushHistoryPoint() {
+  const point = {
     t: state.t,
     x: state.x,
     v: state.v,
     a: state.a,
     fnet: state.Fnet
-  });
+  };
+
+  const last = state.trace[state.trace.length - 1];
+  if (last && Math.abs(last.t - point.t) < 1e-9) {
+    state.trace[state.trace.length - 1] = point;
+  } else {
+    state.trace.push(point);
+  }
   if (state.trace.length > TRACE_MAX) {
     state.trace.shift();
   }
@@ -142,29 +167,42 @@ function pushHistory() {
 }
 
 function updateTraceBounds() {
-  if (state.trace.length === 0) {
+  const p = state.prediction;
+  if (!p) {
     state.yMin = -0.2;
     state.yMax = 0.2;
-    state.tAxisMax = 0.5;
+    state.tAxisMax = Math.max(0.5, state.t);
     return;
   }
 
-  const { key } = graphSeriesConfig();
-  const values = state.trace.map((p) => p[key]);
-  const vMin = Math.min(...values);
-  const vMax = Math.max(...values);
-  const span = Math.max(0.15, vMax - vMin);
-  const pad = 0.18 * span;
-
-  if (state.trace.length <= 1) {
-    state.yMin = vMin - pad;
-    state.yMax = vMax + pad;
+  const minSpan = 0.2;
+  if (state.graphMode === "v") {
+    const vmax = Math.max(0.2, p.v1);
+    state.yMin = -0.08 * vmax;
+    state.yMax = vmax * 1.12;
+  } else if (state.graphMode === "a") {
+    const lo = Math.min(0, p.a2);
+    const hi = Math.max(0, p.a1);
+    const span = Math.max(minSpan, hi - lo);
+    const pad = 0.2 * span;
+    state.yMin = lo - pad;
+    state.yMax = hi + pad;
+  } else if (state.graphMode === "x") {
+    const xmax = Math.max(0.5, p.xTotal);
+    state.yMin = -0.06 * xmax;
+    state.yMax = xmax * 1.1;
   } else {
-    state.yMin = Math.min(state.yMin, vMin - pad);
-    state.yMax = Math.max(state.yMax, vMax + pad);
+    const f1 = p.net1;
+    const f2 = -p.T;
+    const lo = Math.min(0, f1, f2);
+    const hi = Math.max(0, f1, f2);
+    const span = Math.max(1, hi - lo);
+    const pad = 0.18 * span;
+    state.yMin = lo - pad;
+    state.yMax = hi + pad;
   }
 
-  state.tAxisMax = Math.max(0.5, state.trace[state.trace.length - 1].t);
+  state.tAxisMax = Math.max(0.5, state.tPredictedMax, state.t);
 }
 
 function resetTraceNow() {
@@ -391,12 +429,29 @@ function drawMiniSeriesBox(x, y, w, h, label, points, key, color, minVal, maxVal
   const plotW = w - 64;
   const plotH = h - 28;
 
-  if (points.length < 2 || maxVal - minVal < 1e-9 || tMax <= 0) {
-    return;
-  }
-
   const toX = (t) => plotX + (t / tMax) * plotW;
   const toY = (v) => plotY + plotH - ((v - minVal) / (maxVal - minVal)) * plotH;
+
+  // Subtle XY axes so students can orient quickly without clutter.
+  const hasValidScale = maxVal - minVal > 1e-9 && tMax > 0;
+  const xAxisY = hasValidScale && minVal <= 0 && maxVal >= 0 ? toY(0) : plotY + plotH;
+  const yAxisX = plotX;
+  dctx.strokeStyle = "rgba(42, 63, 94, 0.42)";
+  dctx.lineWidth = 1.2;
+  dctx.beginPath();
+  dctx.moveTo(yAxisX, plotY);
+  dctx.lineTo(yAxisX, plotY + plotH);
+  dctx.moveTo(plotX, xAxisY);
+  dctx.lineTo(plotX + plotW, xAxisY);
+  dctx.stroke();
+  dctx.fillStyle = "rgba(42, 63, 94, 0.72)";
+  dctx.font = "bold 11px Arial";
+  dctx.fillText("Y", yAxisX + 4, plotY + 12);
+  dctx.fillText("X", plotX + plotW - 10, xAxisY - 6);
+
+  if (points.length < 2 || !hasValidScale) {
+    return;
+  }
 
   const yTicks = 5;
   dctx.font = "11px Arial";
@@ -424,6 +479,43 @@ function drawMiniSeriesBox(x, y, w, h, label, points, key, color, minVal, maxVal
     else dctx.lineTo(px, py);
   });
   dctx.stroke();
+
+  // Max-value trace: highlight its level on Y axis and project to the peak point.
+  let maxPoint = points[0];
+  for (let i = 1; i < points.length; i += 1) {
+    if (points[i][key] > maxPoint[key]) {
+      maxPoint = points[i];
+    }
+  }
+  if (maxPoint) {
+    const maxY = toY(maxPoint[key]);
+    const maxX = toX(maxPoint.t);
+
+    dctx.save();
+    dctx.setLineDash([4, 4]);
+    dctx.strokeStyle = "rgba(42, 63, 94, 0.45)";
+    dctx.lineWidth = 1.1;
+    dctx.beginPath();
+    dctx.moveTo(plotX, maxY);
+    dctx.lineTo(maxX, maxY);
+    dctx.stroke();
+    dctx.restore();
+
+    dctx.strokeStyle = color;
+    dctx.lineWidth = 2;
+    dctx.beginPath();
+    dctx.moveTo(plotX - 6, maxY);
+    dctx.lineTo(plotX + 6, maxY);
+    dctx.stroke();
+
+    dctx.fillStyle = color;
+    dctx.font = "bold 10px Arial";
+    dctx.textAlign = "right";
+    dctx.textBaseline = "middle";
+    dctx.fillText(`max ${maxPoint[key].toFixed(2)}`, plotX - 8, maxY);
+    dctx.textAlign = "start";
+    dctx.textBaseline = "alphabetic";
+  }
 
   // Phase separators on graph: force-off and stop.
   const tForceOff = state.markers.forceOff ? state.markers.forceOff.t : null;
@@ -639,6 +731,9 @@ function integrate(dt) {
 
   while (remaining > 1e-9) {
     updateDynamics();
+    if (state.phase === "stopped") {
+      break;
+    }
 
     let segment = remaining;
     if (state.t < state.forceDuration) {
@@ -651,6 +746,7 @@ function integrate(dt) {
         state.markers.forceOff = { x: state.x, t: state.forceDuration, v: state.v };
       }
       remaining -= segment;
+      pushHistoryPoint();
       continue;
     }
 
@@ -662,6 +758,7 @@ function integrate(dt) {
         state.markers.forceOff = { x: state.x, t: state.forceDuration, v: state.v };
       }
       remaining -= segment;
+      pushHistoryPoint();
       continue;
     }
 
@@ -686,11 +783,9 @@ function integrate(dt) {
         state.t += segment;
         remaining -= segment;
       }
+      pushHistoryPoint();
       continue;
     }
-
-    state.t += segment;
-    remaining -= segment;
   }
 
   updateDynamics();
@@ -700,8 +795,7 @@ function integrate(dt) {
     }
     state.playing = false;
   }
-
-  pushHistory();
+  pushHistoryPoint();
 }
 
 function tick(timestamp) {
