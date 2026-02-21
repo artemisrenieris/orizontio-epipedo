@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="el">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#005f73" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>Οριζόντιο Επίπεδο με Τριβή</title>
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="top-copyright">© 2026 Artemis Renieris. All rights reserved.</div>
+    <main class="layout">
+      <section class="panel controls">
+        <h1>Οριζόντιο Επίπεδο με Τριβή</h1>
+
+        <label for="massSlider">Μάζα m: <span id="massValue">4.0</span> kg</label>
+        <input id="massSlider" type="range" min="0.5" max="12" step="0.1" value="4.0" />
+
+        <label for="muSlider">Συντελεστής τριβής μ: <span id="muValue">0.30</span></label>
+        <input id="muSlider" type="range" min="0.02" max="0.9" step="0.01" value="0.30" />
+
+        <label for="forceSlider">Δύναμη F: <span id="forceValue">20.0</span> N</label>
+        <input id="forceSlider" type="range" min="0" max="80" step="0.5" value="20.0" />
+
+        <label for="forceTimeSlider">Διάρκεια εφαρμογής F: <span id="forceTimeValue">3.0</span> s</label>
+        <input id="forceTimeSlider" type="range" min="0.2" max="10" step="0.1" value="3.0" />
+
+        <label class="check-row" for="vectorsToggle">
+          <input id="vectorsToggle" type="checkbox" checked />
+          Εμφάνιση διανυσμάτων
+        </label>
+
+        <div class="btn-row">
+          <button id="playBtn" type="button">Play</button>
+          <button id="pauseBtn" type="button">Pause</button>
+          <button id="resetBtn" type="button">Reset</button>
+          <button id="slowBtn" type="button">Slow motion: Off</button>
+        </div>
+
+        <div class="measurements">
+          <h2>Μετρήσεις</h2>
+          <p>Χρόνος t: <span id="tValue">0.00</span> s</p>
+          <p>Θέση x: <span id="xValue">0.00</span> m</p>
+          <p>Ταχύτητα υ: <span id="vValue">0.00</span> m/s</p>
+          <p>Επιτάχυνση α: <span id="aValue">0.00</span> m/s²</p>
+          <p>Τριβή ολίσθησης T: <span id="fricValue">0.00</span> N</p>
+          <p>Συνισταμένη ΣF: <span id="fnetValue">0.00</span> N</p>
+          <p>Μετατόπιση Δx<sub>1</sub>: <span id="s1Value">0.00</span> m</p>
+          <p>Μετατόπιση Δx<sub>2</sub>: <span id="s2Value">0.00</span> m</p>
+          <p id="phaseLine">Φάση: -</p>
+          <p id="statusLine" class="status">Κατάσταση: Έτοιμο.</p>
+        </div>
+      </section>
+
+      <section class="panel sim-area">
+        <canvas id="simCanvas" width="980" height="540" aria-label="Οριζόντιο επίπεδο με τριβή"></canvas>
+
+        <div class="canvas-controls">
+          <button id="miniPlayBtn" type="button">Start</button>
+          <button id="miniResetBtn" type="button">Reset</button>
+          <button id="miniSlowBtn" type="button">Slow</button>
+          <select id="graphModeSelect" aria-label="Επιλογή γραφικής">
+            <option value="v" selected>υ - t</option>
+            <option value="a">α - t</option>
+            <option value="x">x - t</option>
+            <option value="fnet">ΣF - t</option>
+          </select>
+        </div>
+
+        <canvas id="diagCanvas" width="980" height="460" aria-label="Diagnostics"></canvas>
+
+        <div class="legend">
+          <span><i class="f"></i>F</span>
+          <span><i class="t"></i>T</span>
+          <span><i class="fnet"></i>ΣF</span>
+          <span><i class="v"></i>υ</span>
+        </div>
+
+        <div class="instructions">
+          <h2>Διδακτική Λογική</h2>
+          <p>Φάση 1: Ασκείται F, το σώμα εκτελεί ευθύγραμμη ομαλά επιταχυνόμενη κίνηση.</p>
+          <p>Φάση 2: Η F μηδενίζεται, δρα μόνο τριβή και το σώμα επιβραδύνεται μέχρι να σταματήσει.</p>
+          <p>Σχέσεις: T=μmg, ΣF=F-T (φάση 1), ΣF=-T (φάση 2), α=ΣF/m.</p>
+        </div>
+      </section>
+    </main>
+
+    <script defer src="./pwa.js"></script>
+    <script defer src="./sim.js"></script>
+  </body>
+</html>
